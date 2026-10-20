@@ -1,0 +1,154 @@
+# ============================================================================
+#  CLINIC DATA — the single source of truth for ClinicMate
+# ----------------------------------------------------------------------------
+#  Paste or edit your clinic's information below in plain text. ClinicMate
+#  answers patients using ONLY what is written in this file — nothing else.
+#  Any layout works (headings, lists, tables pasted from a PDF), as long as the
+#  facts are here. After editing, redeploy with one command:
+#      ./scripts/deploy.sh prod      (or)      .\scripts\deploy.ps1 -Environment prod
+#
+#  The data below is SAMPLE data for a fictional clinic. Replace it with yours.
+# ============================================================================
+
+CLINIC PROFILE
+Clinic Name: Nexus Medical Clinic
+Address: House 12, Road 7, Dhanmondi, Dhaka 1205, Bangladesh
+General Desk / Appointments: +880-1700-111-777
+Emergency Department (24/7): +880-1700-111-999
+Email: appointments@nexusclinic.example
+Opening Hours: Saturday - Thursday, 08:00 AM - 10:00 PM | Friday, 03:00 PM - 10:00 PM
+Emergency Department: Open 24 hours, 7 days a week (Ground Floor, Gate 2)
+Currency: Bangladeshi Taka (৳)
+
+----------------------------------------------------------------------------
+DOCTOR DIRECTORY
+----------------------------------------------------------------------------
+
+Dr. Mahmudur Rahman
+Specialty: Internal Medicine
+Qualifications: MBBS, MD (Internal Medicine)
+Treats: fever, cold and flu, diabetes, high blood pressure, general weakness, infections, routine check-ups
+Ward: General Medicine Ward (Ground Floor)
+Visiting Hours: Everyday, 08:00 AM - 12:00 PM
+Consultation Fee: ৳800
+Direct Booking: +880-1711-000008
+
+Dr. Nusrat Jahan
+Specialty: Dermatology
+Qualifications: MBBS, DDV, FCPS (Dermatology)
+Treats: skin rashes, acne, eczema, psoriasis, allergies, hair loss, nail and skin infections
+Ward: Skin & VD Ward (2nd Floor)
+Visiting Hours: 04:00 PM - 08:00 PM (Sat-Wed)
+Consultation Fee: ৳1,000
+Direct Booking: +880-1711-000002
+
+Dr. Tanvir Hossain
+Specialty: Cardiology
+Qualifications: MBBS, MD (Cardiology), FACC
+Treats: chest discomfort, palpitations, heart disease, high blood pressure follow-up, cholesterol problems
+Ward: Cardiac Care Unit (3rd Floor)
+Visiting Hours: 10:00 AM - 02:00 PM (Sun-Thu)
+Consultation Fee: ৳1,500
+Direct Booking: +880-1711-000003
+
+Dr. Farzana Akter
+Specialty: Gynecology & Obstetrics
+Qualifications: MBBS, FCPS (Obs & Gynae)
+Treats: pregnancy care, menstrual problems, PCOS, fertility consultation, women's health check-ups
+Ward: Maternity & Women's Health Ward (2nd Floor)
+Visiting Hours: 05:00 PM - 09:00 PM (Sat-Thu)
+Consultation Fee: ৳1,200
+Direct Booking: +880-1711-000004
+
+Dr. Shafiqul Islam
+Specialty: Pediatrics
+Qualifications: MBBS, DCH, FCPS (Pediatrics)
+Treats: child fever, vaccinations, growth and nutrition, childhood infections, newborn care
+Ward: Children's Ward (1st Floor)
+Visiting Hours: 09:00 AM - 01:00 PM (Sat-Thu)
+Consultation Fee: ৳900
+Direct Booking: +880-1711-000005
+
+Dr. Rezaul Karim
+Specialty: Orthopedics
+Qualifications: MBBS, MS (Orthopedics)
+Treats: joint pain, back pain, fractures, sports injuries, arthritis
+Ward: Orthopedic & Trauma Ward (1st Floor)
+Visiting Hours: 06:00 PM - 09:00 PM (Sun-Thu)
+Consultation Fee: ৳1,200
+Direct Booking: +880-1711-000006
+
+Dr. Kamrul Ahsan
+Specialty: Ophthalmology (Eye)
+Qualifications: MBBS, DO, FCPS (Ophthalmology)
+Treats: blurry vision, eye pain, red eyes, cataract, glasses and lens check-ups
+Ward: Eye Care Ward (1st Floor)
+Visiting Hours: 03:00 PM - 07:00 PM (Mon-Thu)
+Consultation Fee: ৳1,000
+Direct Booking: +880-1711-000007
+Note: Appointments for Dr. Kamrul Ahsan are confirmed through the General Desk (+880-1700-111-777).
+
+Dr. Sabrina Chowdhury
+Specialty: ENT (Ear, Nose & Throat)
+Qualifications: MBBS, DLO, MS (ENT)
+Treats: ear pain, hearing problems, sinusitis, sore throat, tonsillitis, nose bleeding
+Ward: ENT Ward (2nd Floor)
+Visiting Hours: 10:00 AM - 01:00 PM (Sat-Wed)
+Consultation Fee: ৳1,000
+Direct Booking: +880-1711-000009
+
+Dr. Arif Mahmud
+Specialty: Neurology
+Qualifications: MBBS, MD (Neurology)
+Treats: headache and migraine, dizziness, numbness, seizures, stroke follow-up
+Ward: Neuroscience Ward (3rd Floor)
+Visiting Hours: 05:00 PM - 08:00 PM (Sun, Tue, Thu)
+Consultation Fee: ৳1,500
+Direct Booking: +880-1711-000010
+
+Dr. Mehnaz Sultana
+Specialty: Dentistry
+Qualifications: BDS, FCPS (Conservative Dentistry)
+Treats: toothache, cavities, root canal, scaling and cleaning, gum problems
+Ward: Dental Unit (Ground Floor)
+Visiting Hours: 10:00 AM - 06:00 PM (Sat-Thu)
+Consultation Fee: ৳700
+Direct Booking: +880-1711-000011
+
+----------------------------------------------------------------------------
+DIAGNOSTIC TESTS & PRICES
+----------------------------------------------------------------------------
+Complete Blood Count (CBC): ৳400
+Lipid Profile: ৳1,200
+Blood Glucose (Fasting): ৳150
+HbA1c: ৳1,000
+Thyroid Stimulating Hormone (TSH): ৳900
+Liver Function Test (LFT): ৳1,100
+Serum Creatinine: ৳350
+Electrocardiogram (ECG): ৳500
+Echocardiogram: ৳2,500
+Chest X-Ray (PA View): ৳600
+Ultrasonography (Whole Abdomen): ৳1,500
+Magnetic Resonance Imaging (MRI - Brain): ৳8,000
+Computed Tomography (CT Scan - Head): ৳4,500
+Urinalysis (Routine & Microscopic): ৳300
+Dengue NS1 Antigen: ৳500
+
+Test reports: Most blood tests are ready the same day by 06:00 PM. Imaging reports (X-Ray, USG, CT, MRI) are ready within 24 hours.
+Fasting tests: Please fast for 8-10 hours (water is allowed) before Fasting Blood Glucose and Lipid Profile.
+
+----------------------------------------------------------------------------
+HOW TO BOOK AN APPOINTMENT
+----------------------------------------------------------------------------
+1. Call the doctor's Direct Booking number, or the General Desk at +880-1700-111-777.
+2. Share the patient's name, age and preferred day/time within the doctor's visiting hours.
+3. Arrive 15 minutes early and pay the consultation fee at the reception counter.
+Walk-ins are accepted when slots are available, but booked patients are seen first.
+
+----------------------------------------------------------------------------
+PAYMENT & POLICIES
+----------------------------------------------------------------------------
+Payment Methods: Cash, Visa/Mastercard, bKash, Nagad
+Follow-up Visit: Free within 7 days of the first consultation with the same doctor.
+Cancellation: Please call at least 2 hours before your appointment to cancel or reschedule.
+Emergencies: Critical cases go directly to the Emergency Department (24/7) — no appointment needed.

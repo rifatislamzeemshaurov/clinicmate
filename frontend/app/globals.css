@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4f7f8;
+  --foreground: #0f172a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Use the dynamic viewport height on mobile so the input bar never gets
+   pushed off-screen by the browser's address bar showing/hiding. */
+.h-app {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* Subtle dot-grid backdrop for the app shell */
+.bg-grid {
+  background-image: radial-gradient(circle, rgba(71, 85, 105, 0.12) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* Thin, unobtrusive scrollbar for the message list */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.3) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgba(100, 116, 139, 0.25);
+  border-radius: 9999px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 116, 139, 0.4);
+}
+
+/* Message entrance animation */
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-message-in {
+  animation: message-in 0.25s ease-out;
+}
+
+/* Smooth bounce keyframe used by the typing indicator */
+@keyframes bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-6px);
+  }
+}
+
+.animate-bounce {
+  animation: bounce 1.4s infinite;
+}
+
+.delay-100 {
+  animation-delay: 0.1s;
+}
+
+.delay-200 {
+  animation-delay: 0.2s;
+}
