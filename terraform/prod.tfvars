@@ -5,11 +5,13 @@ container_cpu    = 256
 container_memory = 512
 desired_count    = 1
 
-# Optional custom domain — off by default.
-# Flip to true and set root_domain once the domain's hosted zone exists in
-# Route 53. See ../DEPLOYMENT.md for the full walkthrough.
-use_custom_domain = false
-root_domain       = ""
+# Optional custom domain — leave empty to use the CloudFront URL.
+#   domain_name = "yourclinic.com"        -> yourclinic.com + www.yourclinic.com
+#   domain_name = "chat.yourclinic.com"   -> chat.yourclinic.com
+# The domain's hosted zone must exist in Route 53 (see ../DEPLOYMENT.md).
+# Or pass it at deploy time instead: ./scripts/deploy.sh prod yourclinic.com
+domain_name = ""
+include_www = true
 
 # openai_api_key is intentionally NOT set here — it's a secret, injected via
 # TF_VAR_openai_api_key by the deploy/destroy scripts (read from backend/.env).

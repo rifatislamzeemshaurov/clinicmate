@@ -93,6 +93,7 @@ All names are prefixed `clinicmate-<env>-`:
 | S3 buckets | `clinicmate-<env>-frontend-<account-id>`, `clinicmate-<env>-memory-<account-id>` |
 | CloudWatch log group | `/ecs/clinicmate-<env>-api` |
 | CloudFront distribution | tagged `Project=clinicmate` |
+| *Custom domain only:* ACM certificate + Route 53 records | for `domain_name` (and `www.` for apex domains) |
 
 ## 4. Destroy: one command
 
@@ -114,17 +115,65 @@ terraform workspace select default
 terraform workspace delete dev
 ```
 
-## 5. Optional: custom domain (production)
+## 5. Custom domain (one command)
 
-1. Register or host the domain in **Route 53** so a public hosted zone exists.
-2. In `terraform/prod.tfvars` set:
-   ```hcl
-   use_custom_domain = true
-   root_domain       = "yourclinic.com"
-   ```
-3. Run `./scripts/deploy.sh prod`.
+Serve ClinicMate on the clinic's own domain with free, auto-renewing HTTPS:
 
-Terraform issues an ACM certificate in `us-east-1`, validates it by DNS, attaches it to CloudFront, and creates `A`/`AAAA` alias records for both `yourclinic.com` and `www.yourclinic.com`.
+```bash
+./scripts/deploy.sh prod yourclinic.com          # → https://yourclinic.com + https://www.yourclinic.com
+./scripts/deploy.sh prod chat.yourclinic.com     # → https://chat.yourclinic.com (main website untouched)
+./scripts/deploy.sh prod clinic.com.bd           # country-code domains work too
+```
+
+```powershell
+.\scripts\deploy.ps1 -Environment prod -Domain yourclinic.com
+```
+
+### What happens automatically
+
+| Step | Done by |
+|---|---|
+| Find the Route 53 hosted zone that contains the domain (walks up from `chat.clinic.com.bd` to `clinic.com.bd`) | deploy script |
+| Request a free **SSL/TLS certificate** from AWS Certificate Manager (`us-east-1`, as CloudFront requires) | Terraform |
+| Create the DNS validation records and **wait until the certificate is issued** | Terraform |
+| Attach the domain(s) and certificate to CloudFront (TLS 1.2+, HTTP → HTTPS redirect) | Terraform |
+| Create `A` + `AAAA` (IPv4 + IPv6) alias records for every hostname | Terraform |
+| Add the domain to the backend's allowed CORS origins | Terraform |
+| Print every live URL at the end | deploy script |
+
+**Apex vs subdomain.** An apex domain (`yourclinic.com`) also gets `www.yourclinic.com`; set `include_www = false` in tfvars to skip it. A subdomain (`chat.yourclinic.com`) gets only that hostname, so the clinic's existing website keeps running.
+
+**Redeploys keep the domain.** Running `./scripts/deploy.sh prod` again (for example after editing `clinic_data.txt`) reuses the domain already attached to that environment. To detach it and go back to the CloudFront URL:
+
+```bash
+./scripts/deploy.sh prod none
+```
+
+**Set it permanently instead (optional).** Put it in `terraform/prod.tfvars`:
+
+```hcl
+domain_name      = "yourclinic.com"
+hosted_zone_name = ""   # only needed for subdomains when not using the scripts' auto-detection
+```
+
+### One-time: put the domain in Route 53
+
+The domain needs a public hosted zone in Route 53 in the same AWS account.
+
+- **Bought through Route 53:** the zone already exists, so nothing to do.
+- **Bought elsewhere (Namecheap, GoDaddy, a local .bd registrar…):** create the zone once and point the registrar at it:
+
+  ```bash
+  aws route53 create-hosted-zone --name yourclinic.com --caller-reference "$(date +%s)"
+  ```
+
+  Copy the 4 `NameServers` from the output into your registrar's **Custom DNS / Nameservers** setting. DNS changes can take from a few minutes up to 48 hours. Check with `nslookup -type=NS yourclinic.com`.
+
+  > Moving nameservers moves **all** DNS for that domain to Route 53. If the domain already has email (MX) or other records, copy them into the new hosted zone first, or use a **subdomain** (`chat.yourclinic.com`) delegated from the existing DNS instead.
+
+If the script can't find a hosted zone, it stops before changing anything and tells you how to create one.
+
+Costs: the ACM certificate is free, and a Route 53 hosted zone is about $0.50 / month.
 
 ## 6. Configuration reference
 
@@ -135,7 +184,9 @@ Terraform issues an ACM certificate in `us-east-1`, validates it by DNS, attache
 | `openai_model` | `gpt-4o-mini` | tfvars |
 | `container_cpu` / `container_memory` | `256` / `512` | tfvars |
 | `desired_count` | `1` | tfvars |
-| `use_custom_domain` / `root_domain` | `false` / `""` | tfvars |
+| `domain_name` | `""` (CloudFront URL only) | deploy argument or tfvars |
+| `hosted_zone_name` | auto-detected | deploy script, or tfvars |
+| `include_www` | `true` (apex domains only) | tfvars |
 | `openai_api_key` | — (secret) | `backend/.env` → `TF_VAR_openai_api_key` |
 | `image_tag` | — | set by the deploy script |
 
@@ -156,6 +207,12 @@ aws logs tail /ecs/clinicmate-dev-api --since 15m
 **Chat returns an error after deploying**: check the same logs. The usual cause is an invalid or out-of-credit OpenAI key.
 
 **"already exists" errors during apply**: the resource exists in AWS but not in this workspace's state, usually after an interrupted run. Either `terraform import` it or delete it in the console, then re-run the deploy.
+
+**"No public Route 53 hosted zone found"**: the domain (or its parent) has no public hosted zone in this AWS account. See [section 5](#one-time-put-the-domain-in-route-53).
+
+**Custom domain deploy hangs on `aws_acm_certificate_validation`**: AWS can't see the validation records yet, almost always because the registrar's nameservers don't point to the Route 53 zone. Check `nslookup -type=NS yourclinic.com`. Validation finishes within minutes of DNS propagating.
+
+**"CNAMEAlreadyExists" from CloudFront**: that hostname is already attached to another CloudFront distribution, possibly in another AWS account. Remove it there first.
 
 **Frontend shows old content**: the deploy script invalidates CloudFront automatically. Hard-refresh the browser, or wait a minute for the invalidation to finish.
 

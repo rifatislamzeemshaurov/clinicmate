@@ -1,11 +1,13 @@
-project_name      = "clinicmate"
-environment       = "dev"
-openai_model      = "gpt-4o-mini"
-container_cpu     = 256
-container_memory  = 512
-desired_count     = 1
-use_custom_domain = false
-root_domain       = ""
+project_name     = "clinicmate"
+environment      = "dev"
+openai_model     = "gpt-4o-mini"
+container_cpu    = 256
+container_memory = 512
+desired_count    = 1
+
+# Optional custom domain — leave empty to use the CloudFront URL.
+# You can also pass it at deploy time: ./scripts/deploy.sh dev chat.yourclinic.com
+domain_name = ""
 
 # openai_api_key is intentionally NOT set here — it's a secret.
 # The deploy/destroy scripts read it from backend/.env and pass it via the

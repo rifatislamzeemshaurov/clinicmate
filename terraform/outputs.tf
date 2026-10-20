@@ -34,6 +34,11 @@ output "alb_dns_name" {
 }
 
 output "custom_domain_url" {
-  description = "Root URL of the production site"
-  value       = var.use_custom_domain ? "https://${var.root_domain}" : ""
+  description = "Primary custom-domain URL (empty when no custom domain is configured)"
+  value       = local.use_custom_domain ? "https://${local.domain_name}" : ""
+}
+
+output "custom_domain_hostnames" {
+  description = "Every hostname served by CloudFront for the custom domain"
+  value       = local.aliases
 }

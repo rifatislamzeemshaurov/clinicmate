@@ -2,10 +2,17 @@
 data "aws_caller_identity" "current" {}
 
 locals {
-  aliases = var.use_custom_domain && var.root_domain != "" ? [
-    var.root_domain,
-    "www.${var.root_domain}"
-  ] : []
+  # Custom domain (optional). Accepts an apex ("yourclinic.com") or a
+  # subdomain ("chat.yourclinic.com"). Empty = CloudFront default domain only.
+  domain_name       = lower(trimspace(var.domain_name))
+  use_custom_domain = local.domain_name != ""
+  hosted_zone_name  = var.hosted_zone_name != "" ? lower(trimspace(var.hosted_zone_name)) : local.domain_name
+  is_apex_domain    = local.domain_name == local.hosted_zone_name
+
+  aliases = local.use_custom_domain ? concat(
+    [local.domain_name],
+    local.is_apex_domain && var.include_www ? ["www.${local.domain_name}"] : []
+  ) : []
 
   name_prefix = "${var.project_name}-${var.environment}"
 
@@ -287,7 +294,7 @@ resource "aws_ecs_task_definition" "api" {
         }
       ]
       environment = [
-        { name = "CORS_ORIGINS", value = var.use_custom_domain ? "https://${var.root_domain},https://www.${var.root_domain}" : "https://${aws_cloudfront_distribution.main.domain_name}" },
+        { name = "CORS_ORIGINS", value = join(",", concat(["https://${aws_cloudfront_distribution.main.domain_name}"], [for d in local.aliases : "https://${d}"])) },
         { name = "S3_BUCKET", value = aws_s3_bucket.memory.id },
         { name = "USE_S3", value = "true" },
         { name = "OPENAI_API_KEY", value = var.openai_api_key },
@@ -377,9 +384,11 @@ resource "aws_cloudfront_distribution" "main" {
   aliases = local.aliases
 
   viewer_certificate {
-    acm_certificate_arn            = var.use_custom_domain ? aws_acm_certificate.site[0].arn : null
-    cloudfront_default_certificate = var.use_custom_domain ? false : true
-    ssl_support_method             = var.use_custom_domain ? "sni-only" : null
+    # Reference the *validation* resource so CloudFront waits until the
+    # certificate is actually issued before attaching it.
+    acm_certificate_arn            = local.use_custom_domain ? aws_acm_certificate_validation.site[0].certificate_arn : null
+    cloudfront_default_certificate = local.use_custom_domain ? false : true
+    ssl_support_method             = local.use_custom_domain ? "sni-only" : null
     minimum_protocol_version       = "TLSv1.2_2021"
   }
 
@@ -497,92 +506,66 @@ resource "aws_cloudfront_distribution" "main" {
     }
   }
 }
-
 # ------------------------------------------------------------------------------
-# Optional: Custom domain configuration (only created when use_custom_domain = true)
+# Optional: custom domain (only created when domain_name is set)
+#
+#   domain_name = "yourclinic.com"       -> https://yourclinic.com + https://www.yourclinic.com
+#   domain_name = "chat.yourclinic.com"  -> https://chat.yourclinic.com
+#
+# The domain's public hosted zone must already exist in Route 53. Terraform
+# issues a free ACM certificate (us-east-1, as CloudFront requires), validates
+# it via DNS automatically, attaches it to CloudFront and creates IPv4 + IPv6
+# alias records for every hostname.
 # ------------------------------------------------------------------------------
-data "aws_route53_zone" "root" {
-  count        = var.use_custom_domain ? 1 : 0
-  name         = var.root_domain
+data "aws_route53_zone" "site" {
+  count        = local.use_custom_domain ? 1 : 0
+  name         = local.hosted_zone_name
   private_zone = false
 }
 
 resource "aws_acm_certificate" "site" {
-  count                     = var.use_custom_domain ? 1 : 0
+  count                     = local.use_custom_domain ? 1 : 0
   provider                  = aws.us_east_1
-  domain_name               = var.root_domain
-  subject_alternative_names = ["www.${var.root_domain}"]
+  domain_name               = local.domain_name
+  subject_alternative_names = slice(local.aliases, 1, length(local.aliases))
   validation_method         = "DNS"
-  lifecycle { create_before_destroy = true }
-  tags = local.common_tags
+  tags                      = local.common_tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_route53_record" "site_validation" {
-  for_each = var.use_custom_domain ? {
+  for_each = local.use_custom_domain ? {
     for dvo in aws_acm_certificate.site[0].domain_validation_options :
     dvo.domain_name => dvo
   } : {}
 
-  zone_id = data.aws_route53_zone.root[0].zone_id
-  name    = each.value.resource_record_name
-  type    = each.value.resource_record_type
-  ttl     = 300
-  records = [each.value.resource_record_value]
+  zone_id         = data.aws_route53_zone.site[0].zone_id
+  name            = each.value.resource_record_name
+  type            = each.value.resource_record_type
+  ttl             = 300
+  records         = [each.value.resource_record_value]
+  allow_overwrite = true
 }
 
 resource "aws_acm_certificate_validation" "site" {
-  count           = var.use_custom_domain ? 1 : 0
-  provider        = aws.us_east_1
-  certificate_arn = aws_acm_certificate.site[0].arn
-  validation_record_fqdns = [
-    for r in aws_route53_record.site_validation : r.fqdn
-  ]
+  count                   = local.use_custom_domain ? 1 : 0
+  provider                = aws.us_east_1
+  certificate_arn         = aws_acm_certificate.site[0].arn
+  validation_record_fqdns = [for r in aws_route53_record.site_validation : r.fqdn]
 }
 
-resource "aws_route53_record" "alias_root" {
-  count   = var.use_custom_domain ? 1 : 0
-  zone_id = data.aws_route53_zone.root[0].zone_id
-  name    = var.root_domain
-  type    = "A"
+resource "aws_route53_record" "site_alias" {
+  for_each = local.use_custom_domain ? {
+    for pair in setproduct(local.aliases, ["A", "AAAA"]) :
+    "${pair[0]}-${pair[1]}" => { name = pair[0], type = pair[1] }
+  } : {}
 
-  alias {
-    name                   = aws_cloudfront_distribution.main.domain_name
-    zone_id                = aws_cloudfront_distribution.main.hosted_zone_id
-    evaluate_target_health = false
-  }
-}
-
-resource "aws_route53_record" "alias_root_ipv6" {
-  count   = var.use_custom_domain ? 1 : 0
-  zone_id = data.aws_route53_zone.root[0].zone_id
-  name    = var.root_domain
-  type    = "AAAA"
-
-  alias {
-    name                   = aws_cloudfront_distribution.main.domain_name
-    zone_id                = aws_cloudfront_distribution.main.hosted_zone_id
-    evaluate_target_health = false
-  }
-}
-
-resource "aws_route53_record" "alias_www" {
-  count   = var.use_custom_domain ? 1 : 0
-  zone_id = data.aws_route53_zone.root[0].zone_id
-  name    = "www.${var.root_domain}"
-  type    = "A"
-
-  alias {
-    name                   = aws_cloudfront_distribution.main.domain_name
-    zone_id                = aws_cloudfront_distribution.main.hosted_zone_id
-    evaluate_target_health = false
-  }
-}
-
-resource "aws_route53_record" "alias_www_ipv6" {
-  count   = var.use_custom_domain ? 1 : 0
-  zone_id = data.aws_route53_zone.root[0].zone_id
-  name    = "www.${var.root_domain}"
-  type    = "AAAA"
+  zone_id = data.aws_route53_zone.site[0].zone_id
+  name    = each.value.name
+  type    = each.value.type
 
   alias {
     name                   = aws_cloudfront_distribution.main.domain_name

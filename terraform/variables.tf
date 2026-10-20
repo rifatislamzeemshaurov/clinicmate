@@ -57,14 +57,24 @@ variable "desired_count" {
   default     = 1
 }
 
-variable "use_custom_domain" {
-  description = "Attach a custom domain to CloudFront"
-  type        = bool
-  default     = false
-}
-
-variable "root_domain" {
-  description = "Apex domain name, e.g. mydomain.com"
+variable "domain_name" {
+  description = "Optional custom domain, e.g. \"yourclinic.com\" or \"chat.yourclinic.com\". Leave empty to use the CloudFront default domain."
   type        = string
   default     = ""
+  validation {
+    condition     = var.domain_name == "" || can(regex("^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?[.])+[a-zA-Z]{2,}$", trimspace(var.domain_name)))
+    error_message = "domain_name must be a valid hostname such as yourclinic.com or chat.yourclinic.com (no https://, no trailing slash)."
+  }
+}
+
+variable "hosted_zone_name" {
+  description = "Route 53 public hosted zone that contains domain_name. Defaults to domain_name itself; set it when domain_name is a subdomain (e.g. zone \"yourclinic.com\" for \"chat.yourclinic.com\"). The deploy scripts detect it automatically."
+  type        = string
+  default     = ""
+}
+
+variable "include_www" {
+  description = "When domain_name is the zone apex, also serve www.<domain_name>"
+  type        = bool
+  default     = true
 }

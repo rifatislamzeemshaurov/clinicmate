@@ -24,9 +24,9 @@ Patients describe their symptoms and get the right doctor, ward, visiting hours,
 
 ### At a glance
 
-| ⚡ Setup for a new clinic | 🚀 Deploy | 🧹 Teardown | 🔒 Off-topic & jailbreak attempts |
-|:---:|:---:|:---:|:---:|
-| Edit **1 text file** | **1 command** | **1 command** | **Blocked before the AI model sees them** |
+| ⚡ Setup for a new clinic | 🚀 Deploy | 🌐 Custom domain + HTTPS | 🧹 Teardown | 🔒 Off-topic & jailbreak attempts |
+|:---:|:---:|:---:|:---:|:---:|
+| Edit **1 text file** | **1 command** | **1 command**, free SSL | **1 command** | **Blocked before the AI model sees them** |
 
 ## Why ClinicMate
 
@@ -40,6 +40,7 @@ Front desks spend most of the day answering the same questions: *Which doctor sh
 | 🛡️ **Strict guardrails** | A separate classifier checks every message *before* the assistant sees it. Off-topic requests, jailbreaks and prompt-extraction attempts get a polite, canned decline. |
 | 🧠 **Conversation memory** | Each chat session is stored in S3, so follow-ups like *"and what time is he available?"* just work. |
 | 📄 **One file to manage** | All clinic knowledge lives in a single plain-text file. Edit it, run one command, and it's live. |
+| 🌐 **Custom domain in one command** | `./scripts/deploy.sh prod yourclinic.com` puts ClinicMate on the clinic's own domain or a subdomain like `chat.yourclinic.com`, with a free auto-renewing SSL certificate, IPv4 + IPv6 DNS and HTTPS redirect, all automatic. |
 | ☁️ **One-command deploy & destroy** | Terraform plus a deploy script provision everything on AWS: ECR, ECS Fargate, ALB, S3 and CloudFront with HTTPS. |
 
 ## Screenshots
@@ -65,7 +66,9 @@ Front desks spend most of the day answering the same questions: *Which doctor sh
 
 ```mermaid
 flowchart LR
-    U([Patient's browser]) -->|HTTPS| CF[Amazon CloudFront<br/>single domain]
+    U([Patient's browser]) -->|HTTPS| R53[Route 53<br/>custom domain · optional]
+    R53 --> CF[Amazon CloudFront<br/>single domain]
+    ACM[ACM<br/>free SSL certificate] -.-> CF
     CF -->|/ static site| S3F[(S3<br/>Next.js frontend)]
     CF -->|/chat · /health · /conversation/*| ALB[Application<br/>Load Balancer]
     ALB --> ECS[ECS Fargate<br/>FastAPI container]
@@ -75,6 +78,7 @@ flowchart LR
     DATA[/clinic_data.txt/] -.->|baked into image| ECS
 ```
 
+- **Your domain, optional.** Bring `yourclinic.com` or `chat.yourclinic.com`, and Route 53 + ACM give it DNS and a free, auto-renewing certificate. Without one, the app runs on the CloudFront HTTPS URL.
 - **One HTTPS domain.** CloudFront serves the static frontend and proxies the API paths to the load balancer, so there's no CORS and no separate API URL.
 - **Locked-down backend.** The load balancer only accepts traffic from CloudFront's managed IP range, so nobody can reach the API directly.
 - **Always warm.** An always-on Fargate container means no cold starts. The first message is as fast as the hundredth.
@@ -110,7 +114,8 @@ These are real conversations run against the backend with the sample clinic data
 - **Grounded generation.** The clinic data is injected into the system prompt on every request, and the strict rules plus low temperature (0.2) keep answers to facts in that file.
 - **Structured output to rich UI.** The model returns machine-readable `Doctor | …` / `Test | …` lines, which the React UI parses into cards and price lists while plain text stays plain.
 - **Stateless containers, stateful conversations.** Chat history lives in S3 keyed by a validated UUID session, so containers can scale or restart without losing context.
-- **Infrastructure as code.** Every resource is in Terraform with isolated `dev` / `test` / `prod` workspaces, ECR lifecycle policy, least-privilege IAM, and an optional custom domain with ACM + Route 53.
+- **Infrastructure as code.** Every resource is in Terraform with isolated `dev` / `test` / `prod` workspaces, ECR lifecycle policy and least-privilege IAM.
+- **Production-grade custom domains.** Apex or subdomain, automatic hosted-zone discovery, DNS-validated ACM certificates that CloudFront waits on before attaching, IPv4 + IPv6 aliases, and CORS origins derived from the same variable, so there's no manual DNS or certificate work.
 - **Same scripts on every OS.** Bash and PowerShell versions of the deploy and destroy scripts, with pre-flight checks and fail-fast error handling.
 
 ## Project structure
@@ -127,7 +132,7 @@ clinicmate/
 ├── frontend/               # Next.js 16 + React 19 + Tailwind CSS 4 (static export)
 │   ├── app/
 │   └── components/clinicmate.tsx
-├── terraform/              # ECR, ECS Fargate, ALB, S3, CloudFront, optional Route 53/ACM
+├── terraform/              # ECR, ECS Fargate, ALB, S3, CloudFront + custom domain (Route 53, ACM)
 ├── scripts/
 │   ├── deploy.sh / deploy.ps1     # one-command deploy
 │   └── destroy.sh / destroy.ps1   # one-command teardown
@@ -177,13 +182,23 @@ Open **http://localhost:3000** and ask *"I have a fever, which doctor should I s
 | | macOS / Linux / Git Bash | Windows PowerShell |
 |---|---|---|
 | **Deploy** | `./scripts/deploy.sh prod` | `.\scripts\deploy.ps1 -Environment prod` |
+| **Deploy on your domain** | `./scripts/deploy.sh prod yourclinic.com` | `.\scripts\deploy.ps1 -Environment prod -Domain yourclinic.com` |
 | **Destroy** | `./scripts/destroy.sh prod` | `.\scripts\destroy.ps1 -Environment prod` |
 
 Environments: `dev` · `test` · `prod`, each fully isolated in its own Terraform workspace.
 
 The deploy script bootstraps ECR, builds and pushes the Docker image, applies Terraform, waits for the service to be healthy, builds and uploads the frontend, invalidates the CloudFront cache, and prints your live URL. The destroy script empties the buckets and tears everything down.
 
-See **[DEPLOYMENT.md](DEPLOYMENT.md)** for custom domains, troubleshooting and cost notes.
+### 🌐 Custom domain
+
+```bash
+./scripts/deploy.sh prod yourclinic.com         # https://yourclinic.com + https://www.yourclinic.com
+./scripts/deploy.sh prod chat.yourclinic.com    # https://chat.yourclinic.com (clinic's main site untouched)
+```
+
+The script finds the domain's Route 53 hosted zone automatically, including country-code domains like `clinic.com.bd`. Terraform then issues and validates a free ACM certificate, attaches it to CloudFront, and creates IPv4 + IPv6 records. Later redeploys keep the domain, and `none` detaches it. If the domain is registered elsewhere (Namecheap, GoDaddy, local registrars), see the [one-time Route 53 setup](DEPLOYMENT.md#one-time-put-the-domain-in-route-53).
+
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the full guide, troubleshooting and cost notes.
 
 ## API
 

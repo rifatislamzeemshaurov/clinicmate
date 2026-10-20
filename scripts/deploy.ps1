@@ -1,5 +1,12 @@
+# Usage:
+#   .\scripts\deploy.ps1 -Environment prod                                # CloudFront URL (or keep the existing domain)
+#   .\scripts\deploy.ps1 -Environment prod -Domain yourclinic.com         # + https://yourclinic.com and www
+#   .\scripts\deploy.ps1 -Environment prod -Domain chat.yourclinic.com    # + https://chat.yourclinic.com
+#   .\scripts\deploy.ps1 -Environment prod -Domain none                   # remove a previously attached domain
 param(
-    [string]$Environment = "dev",   # dev | test | prod
+    [ValidateSet("dev", "test", "prod")]
+    [string]$Environment = "dev",
+    [string]$Domain = "",
     [string]$ProjectName = "clinicmate"
 )
 $ErrorActionPreference = "Stop"
@@ -74,6 +81,63 @@ if (-not ($workspaces | Select-String "\b$Environment\b")) {
     Assert-LastExitCode "terraform workspace select $Environment"
 }
 
+# --- Custom domain (optional) --------------------------------------------
+# Finds the Route 53 public hosted zone that contains the domain by walking
+# up its labels (chat.clinic.com.bd -> clinic.com.bd -> com.bd).
+# Runs a native command that may legitimately write to stderr (e.g. a missing
+# output on first deploy) without tripping $ErrorActionPreference = "Stop".
+function Invoke-Quiet {
+    param([scriptblock]$Command)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try { & $Command 2>$null } finally { $ErrorActionPreference = $prev }
+}
+
+function Find-HostedZone {
+    param([string]$Name)
+    $candidate = $Name
+    while ($candidate -like "*.*") {
+        $query = "HostedZones[?Name=='$candidate.' && Config.PrivateZone==``false``].Name | [0]"
+        $zone = Invoke-Quiet { aws route53 list-hosted-zones-by-name --dns-name $candidate --max-items 1 --query $query --output text }
+        if ($LASTEXITCODE -eq 0 -and $zone -and $zone -ne "None") {
+            return $zone.TrimEnd('.')
+        }
+        $candidate = $candidate.Substring($candidate.IndexOf('.') + 1)
+    }
+    return $null
+}
+
+$CustomDomain = ""
+if ($Domain -eq "none") {
+    $CustomDomain = ""
+} elseif ($Domain) {
+    $CustomDomain = ($Domain.ToLower() -replace '^https?://', '' -replace '/.*$', '')
+} else {
+    # Keep the domain attached by a previous deploy of this environment
+    $prevUrl = Invoke-Quiet { terraform output -raw custom_domain_url }
+    if ($LASTEXITCODE -eq 0 -and $prevUrl -like "https://*") {
+        $CustomDomain = $prevUrl -replace '^https://', ''
+    }
+}
+
+$DomainVars = @()
+if ($CustomDomain) {
+    Write-Host "Custom domain: $CustomDomain - looking up its Route 53 hosted zone..." -ForegroundColor Yellow
+    $Zone = Find-HostedZone $CustomDomain
+    if (-not $Zone) {
+        Write-Host ""
+        Write-Host "No public Route 53 hosted zone found for '$CustomDomain'." -ForegroundColor Red
+        Write-Host "Create one first (see DEPLOYMENT.md -> Custom domain), e.g.:" -ForegroundColor Yellow
+        Write-Host "  aws route53 create-hosted-zone --name <your-root-domain> --caller-reference (Get-Date -UFormat %s)" -ForegroundColor White
+        Write-Host "then point your registrar's nameservers at the 4 NS records it returns." -ForegroundColor Yellow
+        exit 1
+    }
+    Write-Host "Using hosted zone: $Zone" -ForegroundColor Cyan
+    $DomainVars = @("-var=domain_name=$CustomDomain", "-var=hosted_zone_name=$Zone")
+} elseif ($Domain -eq "none") {
+    $DomainVars = @("-var=domain_name=")
+}
+
 Write-Host "Ensuring ECR repository exists..." -ForegroundColor Yellow
 # NOTE: -target must be quoted here. Windows PowerShell 5.1 mis-tokenizes an
 # unquoted "-target=resource.name" argument to a native executable (it splits
@@ -113,10 +177,13 @@ Assert-LastExitCode "docker push"
 #    task definition revision pointing at the image we just pushed, which
 #    rolls the service forward automatically.
 Set-Location terraform
+if ($CustomDomain) {
+    Write-Host "(First-time custom domain setup issues and validates an SSL certificate - this can add a few minutes.)" -ForegroundColor Gray
+}
 if ($Environment -eq "prod") {
-    terraform apply -var-file="prod.tfvars" -var="project_name=$ProjectName" -var="environment=$Environment" -var="image_tag=$ImageTag" -auto-approve
+    terraform apply -var-file="prod.tfvars" -var="project_name=$ProjectName" -var="environment=$Environment" -var="image_tag=$ImageTag" @DomainVars -auto-approve
 } else {
-    terraform apply -var="project_name=$ProjectName" -var="environment=$Environment" -var="image_tag=$ImageTag" -auto-approve
+    terraform apply -var="project_name=$ProjectName" -var="environment=$Environment" -var="image_tag=$ImageTag" @DomainVars -auto-approve
 }
 Assert-LastExitCode "terraform apply"
 
@@ -124,7 +191,10 @@ $CfUrl          = terraform output -raw cloudfront_url
 $FrontendBucket = terraform output -raw s3_frontend_bucket
 $ClusterName    = terraform output -raw ecs_cluster_name
 $ServiceName    = terraform output -raw ecs_service_name
-try { $CustomUrl = terraform output -raw custom_domain_url } catch { $CustomUrl = "" }
+$CustomUrl      = Invoke-Quiet { terraform output -raw custom_domain_url }
+if ($CustomUrl -notlike "https://*") { $CustomUrl = "" }
+$CustomHosts    = @()
+if ($CustomUrl) { $CustomHosts = @((Invoke-Quiet { terraform output -json custom_domain_hostnames }) | Out-String | ConvertFrom-Json) }
 
 # 4. Wait for the new task(s) to pass ALB health checks and go live
 Write-Host "Waiting for the ECS service to become stable (can take a few minutes on first deploy)..." -ForegroundColor Yellow
@@ -168,6 +238,9 @@ Write-Host "Deployment complete!" -ForegroundColor Green
 Write-Host "App URL       : $CfUrl" -ForegroundColor Cyan
 if ($CustomUrl) {
     Write-Host "Custom domain : $CustomUrl" -ForegroundColor Cyan
+    foreach ($h in $CustomHosts) {
+        if ("https://$h" -ne $CustomUrl) { Write-Host "                https://$h" -ForegroundColor Cyan }
+    }
 }
 Write-Host "ECS cluster   : $ClusterName" -ForegroundColor Cyan
 Write-Host "ECS service   : $ServiceName" -ForegroundColor Cyan
